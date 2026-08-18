@@ -3,6 +3,7 @@ package com.verzel.challengebackend.web;
 import com.verzel.challengebackend.service.exception.AssentoIndisponivelException;
 import com.verzel.challengebackend.service.exception.EventoAccessDeniedException;
 import com.verzel.challengebackend.service.exception.EventoNotFoundException;
+import com.verzel.challengebackend.service.exception.IngressoNotFoundException;
 import com.verzel.challengebackend.service.exception.InvalidCredentialsException;
 import com.verzel.challengebackend.service.exception.InvalidEventoException;
 import com.verzel.challengebackend.service.exception.InvalidReservaException;
@@ -43,6 +44,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(EventoNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleEventoNotFound(EventoNotFoundException ex, ServerWebExchange exchange) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ErrorResponse(404, "Not Found", ex.getMessage(), exchange.getRequest().getPath().value()));
+    }
+
+    @ExceptionHandler(IngressoNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleIngressoNotFound(IngressoNotFoundException ex, ServerWebExchange exchange) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(new ErrorResponse(404, "Not Found", ex.getMessage(), exchange.getRequest().getPath().value()));
     }
