@@ -1,5 +1,7 @@
 package com.verzel.challengebackend.config;
 
+import com.verzel.challengebackend.domain.CategoriaEvento;
+import com.verzel.challengebackend.domain.FormaVenda;
 import com.verzel.challengebackend.domain.TipoAcesso;
 import io.r2dbc.spi.ConnectionFactory;
 import java.util.List;
@@ -20,7 +22,11 @@ public class R2dbcConfig {
         R2dbcDialect dialect = DialectResolver.getDialect(connectionFactory);
         return R2dbcCustomConversions.of(dialect, List.of(
                 new TipoAcessoToStringConverter(),
-                new StringToTipoAcessoConverter()));
+                new StringToTipoAcessoConverter(),
+                new CategoriaEventoToStringConverter(),
+                new StringToCategoriaEventoConverter(),
+                new FormaVendaToStringConverter(),
+                new StringToFormaVendaConverter()));
     }
 
     @WritingConverter
@@ -36,6 +42,38 @@ public class R2dbcConfig {
         @Override
         public TipoAcesso convert(String source) {
             return TipoAcesso.valueOf(source);
+        }
+    }
+
+    @WritingConverter
+    static class CategoriaEventoToStringConverter implements Converter<CategoriaEvento, String> {
+        @Override
+        public String convert(CategoriaEvento source) {
+            return source.name();
+        }
+    }
+
+    @ReadingConverter
+    static class StringToCategoriaEventoConverter implements Converter<String, CategoriaEvento> {
+        @Override
+        public CategoriaEvento convert(String source) {
+            return CategoriaEvento.valueOf(source);
+        }
+    }
+
+    @WritingConverter
+    static class FormaVendaToStringConverter implements Converter<FormaVenda, String> {
+        @Override
+        public String convert(FormaVenda source) {
+            return source.name();
+        }
+    }
+
+    @ReadingConverter
+    static class StringToFormaVendaConverter implements Converter<String, FormaVenda> {
+        @Override
+        public FormaVenda convert(String source) {
+            return FormaVenda.valueOf(source);
         }
     }
 }

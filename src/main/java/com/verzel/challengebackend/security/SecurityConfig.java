@@ -33,6 +33,10 @@ public class SecurityConfig {
                         .accessDeniedHandler(jwtAuthenticationEntryPoint))
                 .authorizeExchange(exchange -> exchange
                         .pathMatchers(HttpMethod.POST, "/auth/login").permitAll()
+                        .pathMatchers(HttpMethod.GET, "/eventos", "/eventos/**").permitAll()
+                        .pathMatchers(HttpMethod.POST, "/eventos").hasRole("ORGANIZADOR")
+                        .pathMatchers(HttpMethod.PUT, "/eventos/**").hasRole("ORGANIZADOR")
+                        .pathMatchers(HttpMethod.DELETE, "/eventos/**").hasRole("ORGANIZADOR")
                         .anyExchange().authenticated())
                 .addFilterAt(jwtAuthenticationFilter, SecurityWebFiltersOrder.AUTHENTICATION)
                 .build();
