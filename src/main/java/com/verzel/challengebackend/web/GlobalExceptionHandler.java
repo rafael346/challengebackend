@@ -1,6 +1,9 @@
 package com.verzel.challengebackend.web;
 
+import com.verzel.challengebackend.service.exception.EventoAccessDeniedException;
+import com.verzel.challengebackend.service.exception.EventoNotFoundException;
 import com.verzel.challengebackend.service.exception.InvalidCredentialsException;
+import com.verzel.challengebackend.service.exception.InvalidEventoException;
 import com.verzel.challengebackend.web.dto.ErrorResponse;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -29,6 +32,24 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ErrorResponse(400, "Bad Request", "Dados inválidos", exchange.getRequest().getPath().value(),
                         fieldErrors));
+    }
+
+    @ExceptionHandler(EventoNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleEventoNotFound(EventoNotFoundException ex, ServerWebExchange exchange) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ErrorResponse(404, "Not Found", ex.getMessage(), exchange.getRequest().getPath().value()));
+    }
+
+    @ExceptionHandler(EventoAccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleEventoAccessDenied(EventoAccessDeniedException ex, ServerWebExchange exchange) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ErrorResponse(403, "Forbidden", ex.getMessage(), exchange.getRequest().getPath().value()));
+    }
+
+    @ExceptionHandler(InvalidEventoException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidEvento(InvalidEventoException ex, ServerWebExchange exchange) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse(400, "Bad Request", ex.getMessage(), exchange.getRequest().getPath().value()));
     }
 
     @ExceptionHandler(ResponseStatusException.class)
