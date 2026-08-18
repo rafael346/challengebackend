@@ -2,6 +2,7 @@ package com.verzel.challengebackend.config;
 
 import com.verzel.challengebackend.domain.CategoriaEvento;
 import com.verzel.challengebackend.domain.FormaVenda;
+import com.verzel.challengebackend.domain.StatusIngresso;
 import com.verzel.challengebackend.domain.TipoAcesso;
 import io.r2dbc.spi.ConnectionFactory;
 import java.util.List;
@@ -26,7 +27,9 @@ public class R2dbcConfig {
                 new CategoriaEventoToStringConverter(),
                 new StringToCategoriaEventoConverter(),
                 new FormaVendaToStringConverter(),
-                new StringToFormaVendaConverter()));
+                new StringToFormaVendaConverter(),
+                new StatusIngressoToStringConverter(),
+                new StringToStatusIngressoConverter()));
     }
 
     @WritingConverter
@@ -74,6 +77,22 @@ public class R2dbcConfig {
         @Override
         public FormaVenda convert(String source) {
             return FormaVenda.valueOf(source);
+        }
+    }
+
+    @WritingConverter
+    static class StatusIngressoToStringConverter implements Converter<StatusIngresso, String> {
+        @Override
+        public String convert(StatusIngresso source) {
+            return source.name();
+        }
+    }
+
+    @ReadingConverter
+    static class StringToStatusIngressoConverter implements Converter<String, StatusIngresso> {
+        @Override
+        public StatusIngresso convert(String source) {
+            return StatusIngresso.valueOf(source);
         }
     }
 }
