@@ -25,25 +25,25 @@ public class JwtAuthenticationEntryPoint implements ServerAuthenticationEntryPoi
 
     @Override
     public Mono<Void> commence(ServerWebExchange exchange, AuthenticationException ex) {
-        return writeUnauthorized(exchange);
+        return writeError(exchange, HttpStatus.UNAUTHORIZED, "Unauthorized", "Token ausente, inválido ou expirado");
     }
 
     @Override
     public Mono<Void> handle(ServerWebExchange exchange, AccessDeniedException ex) {
-        return writeUnauthorized(exchange);
+        return writeError(exchange, HttpStatus.FORBIDDEN, "Forbidden", "Acesso negado");
     }
 
-    private Mono<Void> writeUnauthorized(ServerWebExchange exchange) {
+    private Mono<Void> writeError(ServerWebExchange exchange, HttpStatus status, String error, String message) {
         var response = exchange.getResponse();
-        response.setStatusCode(HttpStatus.UNAUTHORIZED);
+        response.setStatusCode(status);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
-        ErrorResponse body = new ErrorResponse(401, "Unauthorized", "Token ausente, inválido ou expirado",
+        ErrorResponse body = new ErrorResponse(status.value(), error, message,
                 exchange.getRequest().getPath().value());
         byte[] bytes;
         try {
             bytes = objectMapper.writeValueAsBytes(body);
         } catch (Exception e) {
-            bytes = "{\"message\":\"Token ausente, inválido ou expirado\"}".getBytes(StandardCharsets.UTF_8);
+            bytes = ("{\"message\":\"" + message + "\"}").getBytes(StandardCharsets.UTF_8);
         }
         DataBuffer buffer = response.bufferFactory().wrap(bytes);
         return response.writeWith(Mono.just(buffer));
