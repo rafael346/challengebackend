@@ -22,15 +22,15 @@ public interface IngressoRepository extends ReactiveCrudRepository<Ingresso, UUI
     Mono<Integer> expirarReservasVencidas(@Param("eventoId") UUID eventoId);
 
     @Query("SELECT COUNT(*) FROM ingressos WHERE evento_id = :eventoId "
-            + "AND (status = 'VENDIDO' OR (status = 'RESERVADO' AND expira_em > now()))")
+            + "AND (status = 'VENDIDO' OR status = 'USADO' OR (status = 'RESERVADO' AND expira_em > now()))")
     Mono<Long> contarAtivosPorEvento(@Param("eventoId") UUID eventoId);
 
     @Query("SELECT * FROM ingressos WHERE evento_id = :eventoId AND fileira IS NOT NULL "
-            + "AND (status = 'VENDIDO' OR (status = 'RESERVADO' AND expira_em > now()))")
+            + "AND (status = 'VENDIDO' OR status = 'USADO' OR (status = 'RESERVADO' AND expira_em > now()))")
     Flux<Ingresso> buscarAssentosOcupados(@Param("eventoId") UUID eventoId);
 
     @Query("SELECT * FROM ingressos WHERE evento_id = :eventoId AND fileira = :fileira AND coluna = :coluna "
-            + "AND (status = 'VENDIDO' OR (status = 'RESERVADO' AND expira_em > now()))")
+            + "AND (status = 'VENDIDO' OR status = 'USADO' OR (status = 'RESERVADO' AND expira_em > now()))")
     Mono<Ingresso> buscarAssentoAtivo(@Param("eventoId") UUID eventoId, @Param("fileira") Integer fileira,
             @Param("coluna") Integer coluna);
 
