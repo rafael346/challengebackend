@@ -189,4 +189,21 @@ public class ReservaService {
         }
         return Mono.empty();
     }
+
+    public Mono<Disponibilidade> disponibilidade(UUID eventoId) {
+        return eventoRepository.findById(eventoId)
+                .switchIfEmpty(Mono.error(new EventoNotFoundException()))
+                .flatMap(evento -> {
+                    if (evento.getFormaVenda() == FormaVenda.ASSENTOS) {
+                        return ingressoRepository.buscarAssentosOcupados(eventoId)
+                                .map(i -> new Disponibilidade.Assento(i.getFileira(), i.getColuna()))
+                                .collectList()
+                                .map(ocupados -> Disponibilidade.paraAssentos(evento.getFileiras(),
+                                        evento.getColunas(), ocupados));
+                    }
+                    return ingressoRepository.contarAtivosPorEvento(eventoId)
+                            .map(ativos -> Disponibilidade
+                                    .paraPista(evento.getQuantidadeTotalIngressos() - ativos.intValue()));
+                });
+    }
 }

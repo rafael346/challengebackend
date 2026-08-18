@@ -272,4 +272,48 @@ class ReservaServiceTest {
         return new Evento(id, "Show", CategoriaEvento.SHOW, "Descrição", "Arena", agora.plusDays(10), FormaVenda.PISTA,
                 null, null, quantidadeTotal, new BigDecimal("80.00"), UUID.randomUUID(), agora, agora);
     }
+
+    @Test
+    void disponibilidadeDeEventoAssentosRetornaGradeComOcupados() {
+        UUID eventoId = UUID.randomUUID();
+        Evento evento = eventoAssentos(eventoId);
+        Ingresso ocupado = ingressoReservado(UUID.randomUUID(), UUID.randomUUID(), OffsetDateTime.now().plusMinutes(5));
+        when(eventoRepository.findById(eventoId)).thenReturn(Mono.just(evento));
+        when(ingressoRepository.buscarAssentosOcupados(eventoId)).thenReturn(Flux.just(ocupado));
+
+        StepVerifier.create(reservaService.disponibilidade(eventoId))
+                .assertNext(disponibilidade -> {
+                    assertThat(disponibilidade.fileiras()).isEqualTo(10);
+                    assertThat(disponibilidade.colunas()).isEqualTo(10);
+                    assertThat(disponibilidade.assentosOcupados()).hasSize(1);
+                    assertThat(disponibilidade.quantidadeDisponivel()).isNull();
+                })
+                .verifyComplete();
+    }
+
+    @Test
+    void disponibilidadeDePistaRetornaQuantidadeDisponivel() {
+        UUID eventoId = UUID.randomUUID();
+        Evento evento = eventoPista(eventoId, 100);
+        when(eventoRepository.findById(eventoId)).thenReturn(Mono.just(evento));
+        when(ingressoRepository.contarAtivosPorEvento(eventoId)).thenReturn(Mono.just(30L));
+
+        StepVerifier.create(reservaService.disponibilidade(eventoId))
+                .assertNext(disponibilidade -> {
+                    assertThat(disponibilidade.fileiras()).isNull();
+                    assertThat(disponibilidade.assentosOcupados()).isNull();
+                    assertThat(disponibilidade.quantidadeDisponivel()).isEqualTo(70);
+                })
+                .verifyComplete();
+    }
+
+    @Test
+    void disponibilidadeDeEventoInexistenteLancaEventoNotFoundException() {
+        UUID eventoId = UUID.randomUUID();
+        when(eventoRepository.findById(eventoId)).thenReturn(Mono.empty());
+
+        StepVerifier.create(reservaService.disponibilidade(eventoId))
+                .expectError(EventoNotFoundException.class)
+                .verify();
+    }
 }
