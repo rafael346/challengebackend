@@ -9,9 +9,16 @@ import com.verzel.challengebackend.repository.IngressoRepository;
 import com.verzel.challengebackend.service.exception.AssentoIndisponivelException;
 import com.verzel.challengebackend.service.exception.EventoNotFoundException;
 import com.verzel.challengebackend.service.exception.InvalidReservaException;
+import com.verzel.challengebackend.service.exception.PagamentoRecusadoException;
 import com.verzel.challengebackend.service.exception.QuantidadeIndisponivelException;
+import com.verzel.challengebackend.service.exception.ReservaAccessDeniedException;
+import com.verzel.challengebackend.service.exception.ReservaExpiradaException;
+import com.verzel.challengebackend.service.exception.ReservaNotFoundException;
+import com.verzel.challengebackend.service.payment.PagamentoGateway;
 import com.verzel.challengebackend.web.dto.AssentoRequest;
+import com.verzel.challengebackend.web.dto.ConfirmarReservaRequest;
 import com.verzel.challengebackend.web.dto.ReservaRequest;
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -27,16 +34,23 @@ public class ReservaService {
 
     private final EventoRepository eventoRepository;
     private final IngressoRepository ingressoRepository;
+    private final PagamentoGateway pagamentoGateway;
     private final long holdDurationSeconds;
 
     public ReservaService(EventoRepository eventoRepository, IngressoRepository ingressoRepository,
-            @Value("${reserva.hold-duration-seconds}") long holdDurationSeconds) {
+            PagamentoGateway pagamentoGateway, @Value("${reserva.hold-duration-seconds}") long holdDurationSeconds) {
         this.eventoRepository = eventoRepository;
         this.ingressoRepository = ingressoRepository;
+        this.pagamentoGateway = pagamentoGateway;
         this.holdDurationSeconds = holdDurationSeconds;
     }
 
-    
+    /**
+     * Cria uma reserva (hold) de um ou mais ingressos. Trava a linha do evento
+     * ({@code buscarComLockPorId}), o que serializa toda tentativa concorrente de reserva
+     * sobre aquele evento; libera holds vencidos; e só então valida e insere os novos
+     * ingressos — tudo em uma única transação.
+     */
     @Transactional
     public Mono<List<Ingresso>> criar(UUID eventoId, ReservaRequest request, UUID compradorId) {
         return eventoRepository.buscarComLockPorId(eventoId)
@@ -121,5 +135,58 @@ public class ReservaService {
                         evento.getPreco(), StatusIngresso.RESERVADO, expiraEm, validoAte, null, agora, agora)
                         .marcarComoNovo())
                 .toList();
+    }
+
+    /**
+     * Confirma o pagamento de uma reserva ativa. Em caso de recusa, a reserva permanece
+     * {@code RESERVADO} — o comprador pode tentar outro cartão até os 10 minutos acabarem
+     * (decisão de produto: falha de pagamento não libera o ingresso na hora).
+     */
+    @Transactional
+    public Mono<List<Ingresso>> confirmar(UUID reservaId, ConfirmarReservaRequest request, UUID compradorId) {
+        return ingressoRepository.findByReservaId(reservaId).collectList()
+                .flatMap(itens -> validarPosseEAtivos(itens, compradorId).then(Mono.defer(() -> {
+                    BigDecimal valorTotal = itens.stream().map(Ingresso::getPreco).reduce(BigDecimal.ZERO,
+                            BigDecimal::add);
+                    return pagamentoGateway.confirmarPagamento(request.paymentMethodId(), valorTotal,
+                                    reservaId.toString())
+                            .flatMap(resultado -> {
+                                if (!resultado.sucesso()) {
+                                    return Mono.error(new PagamentoRecusadoException(resultado.motivoRecusa()));
+                                }
+                                OffsetDateTime agora = OffsetDateTime.now();
+                                List<Ingresso> vendidos = itens.stream()
+                                        .map(item -> item.vendido(resultado.paymentIntentId(), agora))
+                                        .toList();
+                                return ingressoRepository.saveAll(vendidos).collectList();
+                            });
+                })));
+    }
+
+    /** Libera uma reserva ativa antes da expiração natural. */
+    @Transactional
+    public Mono<Void> cancelar(UUID reservaId, UUID compradorId) {
+        return ingressoRepository.findByReservaId(reservaId).collectList()
+                .flatMap(itens -> validarPosseEAtivos(itens, compradorId).then(Mono.defer(() -> {
+                    OffsetDateTime agora = OffsetDateTime.now();
+                    List<Ingresso> cancelados = itens.stream().map(item -> item.cancelado(agora)).toList();
+                    return ingressoRepository.saveAll(cancelados).then();
+                })));
+    }
+
+    private Mono<Void> validarPosseEAtivos(List<Ingresso> itens, UUID compradorId) {
+        if (itens.isEmpty()) {
+            return Mono.error(new ReservaNotFoundException());
+        }
+        OffsetDateTime agora = OffsetDateTime.now();
+        for (Ingresso item : itens) {
+            if (!item.getCompradorId().equals(compradorId)) {
+                return Mono.error(new ReservaAccessDeniedException());
+            }
+            if (item.getStatus() != StatusIngresso.RESERVADO || item.getExpiraEm().isBefore(agora)) {
+                return Mono.error(new ReservaExpiradaException());
+            }
+        }
+        return Mono.empty();
     }
 }

@@ -18,8 +18,15 @@ import com.verzel.challengebackend.repository.IngressoRepository;
 import com.verzel.challengebackend.service.exception.AssentoIndisponivelException;
 import com.verzel.challengebackend.service.exception.EventoNotFoundException;
 import com.verzel.challengebackend.service.exception.InvalidReservaException;
+import com.verzel.challengebackend.service.exception.PagamentoRecusadoException;
 import com.verzel.challengebackend.service.exception.QuantidadeIndisponivelException;
+import com.verzel.challengebackend.service.exception.ReservaAccessDeniedException;
+import com.verzel.challengebackend.service.exception.ReservaExpiradaException;
+import com.verzel.challengebackend.service.exception.ReservaNotFoundException;
+import com.verzel.challengebackend.service.payment.PagamentoGateway;
+import com.verzel.challengebackend.service.payment.PagamentoResultado;
 import com.verzel.challengebackend.web.dto.AssentoRequest;
+import com.verzel.challengebackend.web.dto.ConfirmarReservaRequest;
 import com.verzel.challengebackend.web.dto.ReservaRequest;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -35,13 +42,15 @@ class ReservaServiceTest {
 
     private EventoRepository eventoRepository;
     private IngressoRepository ingressoRepository;
+    private PagamentoGateway pagamentoGateway;
     private ReservaService reservaService;
 
     @BeforeEach
     void setUp() {
         eventoRepository = mock(EventoRepository.class);
         ingressoRepository = mock(IngressoRepository.class);
-        reservaService = new ReservaService(eventoRepository, ingressoRepository, 600);
+        pagamentoGateway = mock(PagamentoGateway.class);
+        reservaService = new ReservaService(eventoRepository, ingressoRepository, pagamentoGateway, 600);
     }
 
     @Test
@@ -139,6 +148,117 @@ class ReservaServiceTest {
         StepVerifier.create(reservaService.criar(eventoId, new ReservaRequest(null, 1), UUID.randomUUID()))
                 .expectError(EventoNotFoundException.class)
                 .verify();
+    }
+
+    @Test
+    void confirmarComPagamentoAprovadoMarcaIngressosComoVendidos() {
+        UUID reservaId = UUID.randomUUID();
+        UUID compradorId = UUID.randomUUID();
+        List<Ingresso> itens = List.of(ingressoReservado(reservaId, compradorId, OffsetDateTime.now().plusMinutes(5)));
+        when(ingressoRepository.findByReservaId(reservaId)).thenReturn(Flux.fromIterable(itens));
+        when(pagamentoGateway.confirmarPagamento(eq("pm_ok"), any(BigDecimal.class), eq(reservaId.toString())))
+                .thenReturn(Mono.just(PagamentoResultado.sucesso("pi_123")));
+        when(ingressoRepository.saveAll(any(List.class)))
+                .thenAnswer(invocation -> Flux.fromIterable((List<Ingresso>) invocation.getArgument(0)));
+
+        StepVerifier.create(reservaService.confirmar(reservaId, new ConfirmarReservaRequest("pm_ok"), compradorId))
+                .assertNext(vendidos -> {
+                    assertThat(vendidos).hasSize(1);
+                    assertThat(vendidos.get(0).getStatus()).isEqualTo(StatusIngresso.VENDIDO);
+                    assertThat(vendidos.get(0).getStripePaymentIntentId()).isEqualTo("pi_123");
+                })
+                .verifyComplete();
+    }
+
+    @Test
+    void confirmarComPagamentoRecusadoLancaPagamentoRecusadoExceptionEMantemReserva() {
+        UUID reservaId = UUID.randomUUID();
+        UUID compradorId = UUID.randomUUID();
+        List<Ingresso> itens = List.of(ingressoReservado(reservaId, compradorId, OffsetDateTime.now().plusMinutes(5)));
+        when(ingressoRepository.findByReservaId(reservaId)).thenReturn(Flux.fromIterable(itens));
+        when(pagamentoGateway.confirmarPagamento(eq("pm_recusado"), any(BigDecimal.class), eq(reservaId.toString())))
+                .thenReturn(Mono.just(PagamentoResultado.recusado("Cartão recusado")));
+
+        StepVerifier.create(reservaService.confirmar(reservaId, new ConfirmarReservaRequest("pm_recusado"), compradorId))
+                .expectError(PagamentoRecusadoException.class)
+                .verify();
+        verify(ingressoRepository, never()).saveAll(any(List.class));
+    }
+
+    @Test
+    void confirmarReservaDeOutroCompradorLancaReservaAccessDeniedException() {
+        UUID reservaId = UUID.randomUUID();
+        List<Ingresso> itens = List.of(ingressoReservado(reservaId, UUID.randomUUID(), OffsetDateTime.now().plusMinutes(5)));
+        when(ingressoRepository.findByReservaId(reservaId)).thenReturn(Flux.fromIterable(itens));
+
+        StepVerifier.create(reservaService.confirmar(reservaId, new ConfirmarReservaRequest("pm_ok"), UUID.randomUUID()))
+                .expectError(ReservaAccessDeniedException.class)
+                .verify();
+    }
+
+    @Test
+    void confirmarReservaVencidaLancaReservaExpiradaException() {
+        UUID reservaId = UUID.randomUUID();
+        UUID compradorId = UUID.randomUUID();
+        List<Ingresso> itens = List.of(ingressoReservado(reservaId, compradorId, OffsetDateTime.now().minusMinutes(1)));
+        when(ingressoRepository.findByReservaId(reservaId)).thenReturn(Flux.fromIterable(itens));
+
+        StepVerifier.create(reservaService.confirmar(reservaId, new ConfirmarReservaRequest("pm_ok"), compradorId))
+                .expectError(ReservaExpiradaException.class)
+                .verify();
+    }
+
+    @Test
+    void confirmarReservaInexistenteLancaReservaNotFoundException() {
+        UUID reservaId = UUID.randomUUID();
+        when(ingressoRepository.findByReservaId(reservaId)).thenReturn(Flux.empty());
+
+        StepVerifier.create(reservaService.confirmar(reservaId, new ConfirmarReservaRequest("pm_ok"), UUID.randomUUID()))
+                .expectError(ReservaNotFoundException.class)
+                .verify();
+    }
+
+    @Test
+    void cancelarReservaAtivaMarcaComoCancelada() {
+        UUID reservaId = UUID.randomUUID();
+        UUID compradorId = UUID.randomUUID();
+        List<Ingresso> itens = List.of(ingressoReservado(reservaId, compradorId, OffsetDateTime.now().plusMinutes(5)));
+        when(ingressoRepository.findByReservaId(reservaId)).thenReturn(Flux.fromIterable(itens));
+        when(ingressoRepository.saveAll(any(List.class)))
+                .thenAnswer(invocation -> Flux.fromIterable((List<Ingresso>) invocation.getArgument(0)));
+
+        StepVerifier.create(reservaService.cancelar(reservaId, compradorId)).verifyComplete();
+        verify(ingressoRepository).saveAll(any(List.class));
+    }
+
+    @Test
+    void cancelarReservaDeOutroCompradorLancaReservaAccessDeniedException() {
+        UUID reservaId = UUID.randomUUID();
+        List<Ingresso> itens = List.of(ingressoReservado(reservaId, UUID.randomUUID(), OffsetDateTime.now().plusMinutes(5)));
+        when(ingressoRepository.findByReservaId(reservaId)).thenReturn(Flux.fromIterable(itens));
+
+        StepVerifier.create(reservaService.cancelar(reservaId, UUID.randomUUID()))
+                .expectError(ReservaAccessDeniedException.class)
+                .verify();
+    }
+
+    @Test
+    void cancelarReservaJaVendidaLancaReservaExpiradaException() {
+        UUID reservaId = UUID.randomUUID();
+        UUID compradorId = UUID.randomUUID();
+        Ingresso vendido = ingressoReservado(reservaId, compradorId, OffsetDateTime.now().plusMinutes(5))
+                .vendido("pi_123", OffsetDateTime.now());
+        when(ingressoRepository.findByReservaId(reservaId)).thenReturn(Flux.just(vendido));
+
+        StepVerifier.create(reservaService.cancelar(reservaId, compradorId))
+                .expectError(ReservaExpiradaException.class)
+                .verify();
+    }
+
+    private Ingresso ingressoReservado(UUID reservaId, UUID compradorId, OffsetDateTime expiraEm) {
+        OffsetDateTime agora = OffsetDateTime.now();
+        return new Ingresso(UUID.randomUUID(), UUID.randomUUID(), reservaId, compradorId, 1, 1,
+                new BigDecimal("100.00"), StatusIngresso.RESERVADO, expiraEm, agora.plusHours(200), null, agora, agora);
     }
 
     private Evento eventoAssentos(UUID id) {
