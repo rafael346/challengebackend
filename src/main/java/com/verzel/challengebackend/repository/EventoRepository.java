@@ -11,4 +11,6 @@ public interface EventoRepository extends ReactiveCrudRepository<Evento, UUID> {
 
     @Query("SELECT * FROM eventos WHERE id = :id FOR UPDATE")
     Mono<Evento> buscarComLockPorId(@Param("id") UUID id);
+
+    Mono<Boolean> existsByTmdbId(Integer tmdbId);
 }

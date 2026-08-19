@@ -47,4 +47,16 @@ class UserRepositoryIT {
                 .assertNext(user -> assertThat(user.getTipoAcesso()).isEqualTo(TipoAcesso.PORTARIA))
                 .verifyComplete();
     }
+
+    @Test
+    void seedDataHasTmdbSyncOrganizer() {
+        UUID idEsperado = UUID.fromString("66666666-6666-6666-6666-666666666666");
+
+        StepVerifier.create(userRepository.findByEmail("tmdb-sync@system.internal"))
+                .assertNext(user -> {
+                    assertThat(user.getTipoAcesso()).isEqualTo(TipoAcesso.ORGANIZADOR);
+                    assertThat(user.getId()).isEqualTo(idEsperado);
+                })
+                .verifyComplete();
+    }
 }
