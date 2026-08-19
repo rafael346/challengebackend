@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.PersistenceCreator;
 import org.springframework.data.annotation.Transient;
 import org.springframework.data.domain.Persistable;
 import org.springframework.data.relational.core.mapping.Table;
@@ -26,6 +27,8 @@ public class Evento implements Persistable<UUID> {
     private final UUID organizerId;
     private final OffsetDateTime createdAt;
     private final OffsetDateTime updatedAt;
+    private final Integer tmdbId;
+    private final String posterUrl;
 
     @Transient
     private boolean isNew = false;
@@ -34,6 +37,15 @@ public class Evento implements Persistable<UUID> {
             OffsetDateTime dataHora, FormaVenda formaVenda, Integer fileiras, Integer colunas,
             Integer quantidadeTotalIngressos, BigDecimal preco, UUID organizerId, OffsetDateTime createdAt,
             OffsetDateTime updatedAt) {
+        this(id, titulo, categoria, descricao, local, dataHora, formaVenda, fileiras, colunas,
+                quantidadeTotalIngressos, preco, organizerId, createdAt, updatedAt, null, null);
+    }
+
+    @PersistenceCreator
+    public Evento(UUID id, String titulo, CategoriaEvento categoria, String descricao, String local,
+            OffsetDateTime dataHora, FormaVenda formaVenda, Integer fileiras, Integer colunas,
+            Integer quantidadeTotalIngressos, BigDecimal preco, UUID organizerId, OffsetDateTime createdAt,
+            OffsetDateTime updatedAt, Integer tmdbId, String posterUrl) {
         this.id = id;
         this.titulo = titulo;
         this.categoria = categoria;
@@ -48,6 +60,8 @@ public class Evento implements Persistable<UUID> {
         this.organizerId = organizerId;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
+        this.tmdbId = tmdbId;
+        this.posterUrl = posterUrl;
     }
 
     public Evento marcarComoNovo() {
@@ -115,5 +129,13 @@ public class Evento implements Persistable<UUID> {
 
     public OffsetDateTime getUpdatedAt() {
         return updatedAt;
+    }
+
+    public Integer getTmdbId() {
+        return tmdbId;
+    }
+
+    public String getPosterUrl() {
+        return posterUrl;
     }
 }

@@ -20,12 +20,14 @@ public record EventoResponse(
         Integer quantidadeTotalIngressos,
         BigDecimal preco,
         UUID organizerId,
-        OffsetDateTime createdAt) {
+        OffsetDateTime createdAt,
+        Integer tmdbId,
+        String posterUrl) {
 
     public static EventoResponse from(Evento evento) {
         return new EventoResponse(evento.getId(), evento.getTitulo(), evento.getCategoria(), evento.getDescricao(),
                 evento.getLocal(), evento.getDataHora(), evento.getFormaVenda(), evento.getFileiras(),
                 evento.getColunas(), evento.getQuantidadeTotalIngressos(), evento.getPreco(),
-                evento.getOrganizerId(), evento.getCreatedAt());
+                evento.getOrganizerId(), evento.getCreatedAt(), evento.getTmdbId(), evento.getPosterUrl());
     }
 }

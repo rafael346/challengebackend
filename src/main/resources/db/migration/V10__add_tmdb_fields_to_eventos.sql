@@ -1,0 +1,3 @@
+ALTER TABLE eventos
+    ADD COLUMN tmdb_id INTEGER UNIQUE,
+    ADD COLUMN poster_url VARCHAR(500);

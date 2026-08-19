@@ -1,6 +1,7 @@
 package com.verzel.challengebackend.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.verzel.challengebackend.domain.CategoriaEvento;
 import com.verzel.challengebackend.domain.Evento;
@@ -71,5 +72,49 @@ class EventoRepositoryIT {
                     assertThat(evento.getPreco()).isEqualByComparingTo("75.00");
                 })
                 .verifyComplete();
+    }
+
+    @Test
+    void savesEventoComTmdbIdEPosterUrl() {
+        UUID id = UUID.randomUUID();
+        OffsetDateTime agora = OffsetDateTime.now();
+        Evento evento = new Evento(id, "Filme Sincronizado", CategoriaEvento.FILME, "Descrição", "Sala a definir",
+                agora.plusDays(5), FormaVenda.ASSENTOS, 10, 10, 100, new BigDecimal("30.00"),
+                ORGANIZADOR_SEED_ID, agora, agora, 999, "https://image.tmdb.org/t/p/w500/poster.jpg")
+                .marcarComoNovo();
+
+        StepVerifier.create(eventoRepository.save(evento).then(eventoRepository.findById(id)))
+                .assertNext(found -> {
+                    assertThat(found.getTmdbId()).isEqualTo(999);
+                    assertThat(found.getPosterUrl()).isEqualTo("https://image.tmdb.org/t/p/w500/poster.jpg");
+                })
+                .verifyComplete();
+    }
+
+    @Test
+    void existsByTmdbIdEUniqueConstraintFuncionamCorretamente() {
+        UUID id1 = UUID.randomUUID();
+        UUID id2 = UUID.randomUUID();
+        OffsetDateTime agora = OffsetDateTime.now();
+        Evento primeiro = new Evento(id1, "Filme A", CategoriaEvento.FILME, "Descrição", "Sala a definir",
+                agora.plusDays(5), FormaVenda.ASSENTOS, 10, 10, 100, new BigDecimal("30.00"),
+                ORGANIZADOR_SEED_ID, agora, agora, 888, null)
+                .marcarComoNovo();
+        Evento duplicado = new Evento(id2, "Filme B", CategoriaEvento.FILME, "Descrição", "Sala a definir",
+                agora.plusDays(5), FormaVenda.ASSENTOS, 10, 10, 100, new BigDecimal("30.00"),
+                ORGANIZADOR_SEED_ID, agora, agora, 888, null)
+                .marcarComoNovo();
+
+        StepVerifier.create(eventoRepository.save(primeiro)
+                        .then(eventoRepository.existsByTmdbId(888)))
+                .expectNext(true)
+                .verifyComplete();
+
+        StepVerifier.create(eventoRepository.existsByTmdbId(777))
+                .expectNext(false)
+                .verifyComplete();
+
+        assertThatThrownBy(() -> eventoRepository.save(duplicado).block())
+                .isInstanceOf(org.springframework.dao.DuplicateKeyException.class);
     }
 }
