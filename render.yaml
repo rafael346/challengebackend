@@ -1,0 +1,41 @@
+databases:
+  - name: challengebackend-db
+    plan: free
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: challengebackend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: DB_HOST
+        fromDatabase:
+          name: challengebackend-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: challengebackend-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: challengebackend-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: challengebackend-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: challengebackend-db
+          property: password
+      - key: JWT_SECRET
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: TMDB_API_KEY
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
