@@ -1,6 +1,7 @@
 package com.verzel.challengebackend.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 import com.verzel.challengebackend.domain.CategoriaEvento;
 import com.verzel.challengebackend.domain.Evento;
@@ -10,6 +11,7 @@ import com.verzel.challengebackend.domain.StatusIngresso;
 import com.verzel.challengebackend.support.TestcontainersConfig;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,6 +27,7 @@ class IngressoRepositoryIT {
 
     private static final UUID ORGANIZADOR_SEED_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID CLIENTE_SEED_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
+    private static final UUID PORTARIA_SEED_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
 
     @Autowired
     private EventoRepository eventoRepository;
@@ -147,6 +150,106 @@ class IngressoRepositoryIT {
         StepVerifier.create(eventoRepository.buscarComLockPorId(eventoAssentosId))
                 .assertNext(evento -> assertThat(evento.getId()).isEqualTo(eventoAssentosId))
                 .verifyComplete();
+    }
+
+    @Test
+    void validarUsoMarcaComoUsadoQuandoVendidoERetornaUmaLinhaAfetada() {
+        OffsetDateTime agora = OffsetDateTime.now();
+        Ingresso vendido = novoIngresso(agora, StatusIngresso.VENDIDO, 8, 8, agora.plusMinutes(10));
+        UUID portariaId = PORTARIA_SEED_ID;
+
+        StepVerifier.create(ingressoRepository.save(vendido)
+                        .flatMap(salvo -> ingressoRepository.validarUso(salvo.getId(), portariaId, agora)))
+                .assertNext(linhasAfetadas -> assertThat(linhasAfetadas).isEqualTo(1))
+                .verifyComplete();
+
+        StepVerifier.create(ingressoRepository.findById(vendido.getId()))
+                .assertNext(usado -> {
+                    assertThat(usado.getStatus()).isEqualTo(StatusIngresso.USADO);
+                    assertThat(usado.getValidadoEm()).isCloseTo(agora, within(1, ChronoUnit.SECONDS));
+                    assertThat(usado.getValidadoPorId()).isEqualTo(portariaId);
+                })
+                .verifyComplete();
+    }
+
+    @Test
+    void validarUsoNaoAfetaLinhaQuandoIngressoJaNaoEstaVendido() {
+        OffsetDateTime agora = OffsetDateTime.now();
+        Ingresso vendido = novoIngresso(agora, StatusIngresso.VENDIDO, 9, 9, agora.plusMinutes(10));
+
+        StepVerifier.create(ingressoRepository.save(vendido)
+                        .flatMap(salvo -> ingressoRepository.save(salvo.usado(PORTARIA_SEED_ID, agora)))
+                        .flatMap(usado -> ingressoRepository.validarUso(usado.getId(), PORTARIA_SEED_ID,
+                                OffsetDateTime.now())))
+                .assertNext(linhasAfetadas -> assertThat(linhasAfetadas).isEqualTo(0))
+                .verifyComplete();
+    }
+
+    @Test
+    void salvaEBuscaIngressoPorTokenDeCompartilhamento() {
+        OffsetDateTime agora = OffsetDateTime.now();
+        UUID token = UUID.randomUUID();
+        Ingresso vendido = novoIngresso(agora, StatusIngresso.VENDIDO, 6, 6, agora.plusMinutes(10));
+
+        StepVerifier.create(ingressoRepository.save(vendido)
+                        .flatMap(salvo -> ingressoRepository.save(salvo.comCompartilhamentoToken(token, agora)))
+                        .then(ingressoRepository.findByCompartilhamentoToken(token)))
+                .assertNext(encontrado -> assertThat(encontrado.getId()).isEqualTo(vendido.getId()))
+                .verifyComplete();
+    }
+
+    @Test
+    void buscarPorTokenDeCompartilhamentoInexistenteRetornaVazio() {
+        StepVerifier.create(ingressoRepository.findByCompartilhamentoToken(UUID.randomUUID()))
+                .verifyComplete();
+    }
+
+    @Test
+    void contarAtivosPorEventoConsideraIngressosUsadosComoAtivos() {
+        OffsetDateTime agora = OffsetDateTime.now();
+        Ingresso usado = novoIngresso(agora, StatusIngresso.USADO, 2, 1, agora.plusMinutes(10));
+
+        StepVerifier.create(ingressoRepository.save(usado)
+                        .then(ingressoRepository.contarAtivosPorEvento(eventoAssentosId)))
+                .assertNext(ativos -> assertThat(ativos).isEqualTo(1L))
+                .verifyComplete();
+    }
+
+    @Test
+    void buscarAssentoAtivoConsideraAssentoUsadoComoOcupado() {
+        OffsetDateTime agora = OffsetDateTime.now();
+        Ingresso usado = novoIngresso(agora, StatusIngresso.USADO, 2, 2, agora.plusMinutes(10));
+
+        StepVerifier.create(ingressoRepository.save(usado)
+                        .then(ingressoRepository.buscarAssentoAtivo(eventoAssentosId, 2, 2)))
+                .assertNext(encontrado -> assertThat(encontrado.getId()).isEqualTo(usado.getId()))
+                .verifyComplete();
+    }
+
+    @Test
+    void buscarAssentosOcupadosIncluiIngressosUsados() {
+        OffsetDateTime agora = OffsetDateTime.now();
+        Ingresso usado = novoIngresso(agora, StatusIngresso.USADO, 2, 3, agora.plusMinutes(10));
+
+        StepVerifier.create(ingressoRepository.save(usado)
+                        .thenMany(ingressoRepository.buscarAssentosOcupados(eventoAssentosId))
+                        .filter(i -> i.getId().equals(usado.getId()))
+                        .next())
+                .assertNext(encontrado -> assertThat(encontrado.getStatus()).isEqualTo(StatusIngresso.USADO))
+                .verifyComplete();
+    }
+
+    @Test
+    void reservarAssentoJaUsadoVioleOIndiceUnico() {
+        OffsetDateTime agora = OffsetDateTime.now();
+        Ingresso vendido = novoIngresso(agora, StatusIngresso.VENDIDO, 2, 4, agora.plusMinutes(10));
+        Ingresso novaTentativa = novoIngresso(agora, StatusIngresso.RESERVADO, 2, 4, agora.plusMinutes(10));
+
+        StepVerifier.create(ingressoRepository.save(vendido)
+                        .flatMap(salvo -> ingressoRepository.save(salvo.usado(PORTARIA_SEED_ID, agora)))
+                        .then(ingressoRepository.save(novaTentativa)))
+                .expectError(DataIntegrityViolationException.class)
+                .verify();
     }
 
     private Ingresso novoIngresso(OffsetDateTime agora, StatusIngresso status, int fileira, int coluna,

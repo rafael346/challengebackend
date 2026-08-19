@@ -39,6 +39,9 @@ public class SecurityConfig {
                         .pathMatchers(HttpMethod.DELETE, "/eventos/**").hasRole("ORGANIZADOR")
                         .pathMatchers(HttpMethod.POST, "/eventos/*/reservas").hasRole("CLIENTE")
                         .pathMatchers(HttpMethod.POST, "/reservas/**").hasRole("CLIENTE")
+                        .pathMatchers(HttpMethod.POST, "/eventos/*/ingressos/*/validar").hasRole("PORTARIA")
+                        .pathMatchers(HttpMethod.GET, "/ingressos/compartilhados/**").permitAll()
+                        .pathMatchers(HttpMethod.POST, "/ingressos/*/compartilhar").hasRole("CLIENTE")
                         .anyExchange().authenticated())
                 .addFilterAt(jwtAuthenticationFilter, SecurityWebFiltersOrder.AUTHENTICATION)
                 .build();

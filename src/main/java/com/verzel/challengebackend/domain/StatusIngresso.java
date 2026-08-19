@@ -4,5 +4,6 @@ public enum StatusIngresso {
     RESERVADO,
     VENDIDO,
     CANCELADA,
-    EXPIRADA
+    EXPIRADA,
+    USADO
 }
