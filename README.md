@@ -17,7 +17,7 @@ Não precisa instalar Postgres nem Maven manualmente.
 ### 1. Clonar o repositório
 
 ```bash
-git clone <url-do-repositorio>
+git clone <[url-do-repositorio](https://github.com/rafael346/challengebackend.git)>
 cd challengebackend
 ```
 
