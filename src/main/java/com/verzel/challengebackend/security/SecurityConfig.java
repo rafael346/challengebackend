@@ -45,6 +45,7 @@ public class SecurityConfig {
                         .pathMatchers(HttpMethod.POST, "/reservas/**").hasRole("CLIENTE")
                         .pathMatchers(HttpMethod.POST, "/eventos/*/ingressos/*/validar").hasRole("PORTARIA")
                         .pathMatchers(HttpMethod.GET, "/ingressos/compartilhados/**").permitAll()
+                        .pathMatchers(HttpMethod.GET, "/ingressos").hasRole("CLIENTE")
                         .pathMatchers(HttpMethod.POST, "/ingressos/*/compartilhar").hasRole("CLIENTE")
                         .anyExchange().authenticated())
                 .addFilterAt(jwtAuthenticationFilter, SecurityWebFiltersOrder.AUTHENTICATION)

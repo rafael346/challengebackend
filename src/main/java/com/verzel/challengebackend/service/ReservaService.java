@@ -190,6 +190,10 @@ public class ReservaService {
         return Mono.empty();
     }
 
+    public Flux<Ingresso> listarComprados(UUID compradorId) {
+        return ingressoRepository.buscarVendidosPorComprador(compradorId);
+    }
+
     public Mono<Disponibilidade> disponibilidade(UUID eventoId) {
         return eventoRepository.findById(eventoId)
                 .switchIfEmpty(Mono.error(new EventoNotFoundException()))

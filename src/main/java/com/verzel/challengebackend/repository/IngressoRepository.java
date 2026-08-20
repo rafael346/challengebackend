@@ -16,6 +16,10 @@ public interface IngressoRepository extends ReactiveCrudRepository<Ingresso, UUI
 
     Mono<Ingresso> findByCompartilhamentoToken(UUID compartilhamentoToken);
 
+    @Query("SELECT * FROM ingressos WHERE comprador_id = :compradorId "
+            + "AND (status = 'VENDIDO' OR status = 'USADO') ORDER BY created_at DESC")
+    Flux<Ingresso> buscarVendidosPorComprador(@Param("compradorId") UUID compradorId);
+
     @Modifying
     @Query("UPDATE ingressos SET status = 'EXPIRADA', updated_at = now() "
             + "WHERE evento_id = :eventoId AND status = 'RESERVADO' AND expira_em <= now()")

@@ -166,6 +166,82 @@ class IngressoControllerIT {
                 .expectStatus().isNotFound();
     }
 
+    @Test
+    void listarMeusIngressosRetornaApenasOsDoUsuarioLogado() {
+        // A conta cliente@verzel.com é reaproveitada por outros testes desta classe (não há
+        // limpeza de banco entre eles), então checamos "contém o meu / não contém o alheio"
+        // em vez de comparar a lista inteira.
+        UUID eventoId = criarEventoERetornarId();
+        UUID ingressoDoCliente = criarEComprarIngressoERetornarId(eventoId, 3, 1);
+        UUID ingressoDaOutraCliente = comprarIngressoParaOutraClienteERetornarId(eventoId, 3, 2);
+        String tokenCliente = loginAndGetToken("cliente@verzel.com", "senha123");
+
+        webTestClient.get().uri("/ingressos")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenCliente)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBodyList(IngressoResponse.class)
+                .value(ingressos -> assertThat(ingressos).extracting(IngressoResponse::id)
+                        .contains(ingressoDoCliente)
+                        .doesNotContain(ingressoDaOutraCliente));
+    }
+
+    @Test
+    void listarMeusIngressosNaoIncluiReservaNaoConfirmada() {
+        UUID eventoId = criarEventoERetornarId();
+        String tokenCliente = loginAndGetToken("cliente@verzel.com", "senha123");
+        UUID ingressoReservado = webTestClient.post().uri("/eventos/{id}/reservas", eventoId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenCliente)
+                .bodyValue(new ReservaRequest(List.of(new AssentoRequest(4, 1)), null))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(ReservaResponse.class)
+                .returnResult()
+                .getResponseBody()
+                .itens()
+                .get(0)
+                .ingressoId();
+
+        webTestClient.get().uri("/ingressos")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenCliente)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBodyList(IngressoResponse.class)
+                .value(ingressos -> assertThat(ingressos).extracting(IngressoResponse::id)
+                        .doesNotContain(ingressoReservado));
+    }
+
+    @Test
+    void listarMeusIngressosSemAutenticacaoRetorna401() {
+        webTestClient.get().uri("/ingressos")
+                .exchange()
+                .expectStatus().isUnauthorized();
+    }
+
+    private UUID comprarIngressoParaOutraClienteERetornarId(UUID eventoId, int fileira, int coluna) {
+        String tokenOutraCliente = loginAndGetToken("outra-cliente@verzel.com", "senha123");
+        UUID reservaId = webTestClient.post().uri("/eventos/{id}/reservas", eventoId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenOutraCliente)
+                .bodyValue(new ReservaRequest(List.of(new AssentoRequest(fileira, coluna)), null))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(ReservaResponse.class)
+                .returnResult()
+                .getResponseBody()
+                .reservaId();
+
+        return webTestClient.post().uri("/reservas/{id}/confirmar", reservaId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenOutraCliente)
+                .bodyValue(new ConfirmarReservaRequest(FakePagamentoGatewayConfig.PAYMENT_METHOD_SUCESSO))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBodyList(IngressoResponse.class)
+                .returnResult()
+                .getResponseBody()
+                .get(0)
+                .id();
+    }
+
     private UUID criarEventoERetornarId() {
         String tokenOrganizador = loginAndGetToken("organizador@verzel.com", "senha123");
         EventoRequest request = new EventoRequest("Show de Validação", CategoriaEvento.SHOW, "Um grande show",
